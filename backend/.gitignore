@@ -1,0 +1,18 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+dist/
+build/
+coverage/
+*.log
+npm-debug.log*
+.DS_Store
+
+# Prisma
+prisma/dev.db
+prisma/migrations/.keep
+
+# IDE
+.vscode/
+.idea/

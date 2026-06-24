@@ -1,0 +1,492 @@
+// ============================================================================
+// EntreSkill Hub — Database Schema
+// ORM: Prisma | Target: PostgreSQL
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------------------
+
+enum Role {
+  USER
+  MENTOR
+  ADMIN
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum ResourceType {
+  VIDEO
+  ARTICLE
+  CHECKLIST
+}
+
+enum RoadmapStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum MentorStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ContentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SessionStatus {
+  REQUESTED
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReportStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+// ----------------------------------------------------------------------------
+// CORE IDENTITY
+// ----------------------------------------------------------------------------
+
+model User {
+  id                String   @id @default(uuid())
+  name              String
+  email             String   @unique
+  passwordHash      String
+  role              Role     @default(USER)
+  isActive          Boolean  @default(true)
+  isEmailVerified   Boolean  @default(false)
+  avatarUrl         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Profiling
+  skillProfile      SkillProfile?
+
+  // Relations - User side
+  bookmarks         Bookmark[]
+  userRoadmaps      UserRoadmap[]
+  refreshTokens     RefreshToken[]
+  questionsAsked    Question[]        @relation("QuestionAuthor")
+  sessionsAsUser    MentorshipSession[] @relation("SessionUser")
+  feedbackGiven     Feedback[]
+  reportsFiled      Report[]          @relation("ReportFiler")
+  resourceProgress  ResourceProgress[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+
+  // Relations - Mentor side (nullable profile)
+  mentorProfile     MentorProfile?
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  revoked     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// SKILL & INTEREST PROFILING
+// ----------------------------------------------------------------------------
+
+model Skill {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  category    String   // e.g. "Craft", "Food", "Digital", "Repair", "Apparel"
+  createdAt   DateTime @default(now())
+
+  userSkills        UserSkill[]
+  ideaSkills        IdeaSkill[]
+  mentorExpertise   MentorExpertise[]
+
+  @@map("skills")
+}
+
+model Interest {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  userInterests UserInterest[]
+  ideaInterests IdeaInterest[]
+
+  @@map("interests")
+}
+
+model SkillProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experienceLevel Difficulty @default(BEGINNER)
+  availableHours  Int      @default(10)  // hours/week the user can commit
+  budgetRange     String   @default("UNDER_5000") // UNDER_5000, 5000_25000, 25000_100000, ABOVE_100000 (INR)
+  location        String?
+  bio             String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  skills    UserSkill[]
+  interests UserInterest[]
+
+  @@map("skill_profiles")
+}
+
+model UserSkill {
+  id              String       @id @default(uuid())
+  skillProfileId  String
+  skillProfile    SkillProfile @relation(fields: [skillProfileId], references: [id], onDelete: Cascade)
+  skillId         String
+  skill           Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  proficiency     Int          @default(1) // 1-5
+
+  @@unique([skillProfileId, skillId])
+  @@map("user_skills")
+}
+
+model UserInterest {
+  id              String       @id @default(uuid())
+  skillProfileId  String
+  skillProfile    SkillProfile @relation(fields: [skillProfileId], references: [id], onDelete: Cascade)
+  interestId      String
+  interest        Interest     @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  @@unique([skillProfileId, interestId])
+  @@map("user_interests")
+}
+
+// ----------------------------------------------------------------------------
+// BUSINESS IDEAS & ROADMAPS
+// ----------------------------------------------------------------------------
+
+model BusinessIdea {
+  id               String        @id @default(uuid())
+  title            String
+  slug             String        @unique
+  summary          String
+  description      String
+  difficulty       Difficulty    @default(BEGINNER)
+  estimatedCostMin Int           // in INR
+  estimatedCostMax Int
+  timeToLaunchDays Int           @default(30)
+  category         String        // matches Skill.category loosely, e.g. "Food", "Craft"
+  isPublished      Boolean       @default(true)
+  createdById      String?       // admin/curator who added it
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  ideaSkills     IdeaSkill[]
+  ideaInterests  IdeaInterest[]
+  roadmap        Roadmap?
+  bookmarks      Bookmark[]
+  resources      Resource[]
+
+  @@index([category])
+  @@index([difficulty])
+  @@map("business_ideas")
+}
+
+model IdeaSkill {
+  id             String       @id @default(uuid())
+  businessIdeaId String
+  businessIdea   BusinessIdea @relation(fields: [businessIdeaId], references: [id], onDelete: Cascade)
+  skillId        String
+  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  weight         Int          @default(1) // relevance weight 1-5, used by recommendation engine
+
+  @@unique([businessIdeaId, skillId])
+  @@map("idea_skills")
+}
+
+model IdeaInterest {
+  id             String       @id @default(uuid())
+  businessIdeaId String
+  businessIdea   BusinessIdea @relation(fields: [businessIdeaId], references: [id], onDelete: Cascade)
+  interestId     String
+  interest       Interest     @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  @@unique([businessIdeaId, interestId])
+  @@map("idea_interests")
+}
+
+// A Roadmap is a structured 1:1 companion to a BusinessIdea with ordered steps.
+model Roadmap {
+  id             String        @id @default(uuid())
+  businessIdeaId String        @unique
+  businessIdea   BusinessIdea  @relation(fields: [businessIdeaId], references: [id], onDelete: Cascade)
+  title          String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  steps        RoadmapStep[]
+  userRoadmaps UserRoadmap[]
+
+  @@map("roadmaps")
+}
+
+// RoadmapStep models: idea validation, required skills & tools, legal & registration,
+// cost estimation, marketing basics — each as an ordered, typed step.
+model RoadmapStep {
+  id          String   @id @default(uuid())
+  roadmapId   String
+  roadmap     Roadmap  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  order       Int
+  phase       String   // VALIDATION, SKILLS_TOOLS, LEGAL, COST, MARKETING, LAUNCH
+  title       String
+  description String
+  estDays     Int      @default(3)
+  createdAt   DateTime @default(now())
+
+  userStepProgress UserStepProgress[]
+
+  @@unique([roadmapId, order])
+  @@map("roadmap_steps")
+}
+
+// Tracks an individual user's adoption of a Roadmap (Progress Tracking Dashboard)
+model UserRoadmap {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roadmapId   String
+  roadmap     Roadmap       @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  status      RoadmapStatus @default(NOT_STARTED)
+  progressPct Int           @default(0)
+  startedAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  completedAt DateTime?
+
+  stepProgress UserStepProgress[]
+
+  @@unique([userId, roadmapId])
+  @@index([userId])
+  @@map("user_roadmaps")
+}
+
+model UserStepProgress {
+  id            String      @id @default(uuid())
+  userRoadmapId String
+  userRoadmap   UserRoadmap @relation(fields: [userRoadmapId], references: [id], onDelete: Cascade)
+  roadmapStepId String
+  roadmapStep   RoadmapStep @relation(fields: [roadmapStepId], references: [id], onDelete: Cascade)
+  isComplete    Boolean     @default(false)
+  completedAt   DateTime?
+
+  @@unique([userRoadmapId, roadmapStepId])
+  @@map("user_step_progress")
+}
+
+model Bookmark {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessIdeaId String
+  businessIdea   BusinessIdea @relation(fields: [businessIdeaId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, businessIdeaId])
+  @@map("bookmarks")
+}
+
+// ----------------------------------------------------------------------------
+// LEARNING RESOURCES
+// ----------------------------------------------------------------------------
+
+model Resource {
+  id             String        @id @default(uuid())
+  title          String
+  type           ResourceType
+  url            String
+  description    String?
+  businessIdeaId String?
+  businessIdea   BusinessIdea? @relation(fields: [businessIdeaId], references: [id], onDelete: SetNull)
+  uploadedById   String?       // mentor or admin who uploaded
+  status         ContentStatus @default(PENDING) // admin approval workflow
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  progress ResourceProgress[]
+
+  @@index([status])
+  @@index([businessIdeaId])
+  @@map("resources")
+}
+
+model ResourceProgress {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  isComplete Boolean  @default(false)
+  completedAt DateTime?
+
+  @@unique([userId, resourceId])
+  @@map("resource_progress")
+}
+
+// ----------------------------------------------------------------------------
+// MENTORSHIP
+// ----------------------------------------------------------------------------
+
+model MentorProfile {
+  id              String       @id @default(uuid())
+  userId          String       @unique
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline        String
+  bio             String
+  yearsExperience Int          @default(0)
+  status          MentorStatus @default(PENDING)
+  verifiedAt      DateTime?
+  rejectionReason String?
+  linkedinUrl     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  expertise        MentorExpertise[]
+  questionsAnswered Question[]          @relation("QuestionMentor")
+  sessions          MentorshipSession[] @relation("SessionMentor")
+
+  @@index([status])
+  @@map("mentor_profiles")
+}
+
+model MentorExpertise {
+  id              String         @id @default(uuid())
+  mentorProfileId String
+  mentorProfile   MentorProfile  @relation(fields: [mentorProfileId], references: [id], onDelete: Cascade)
+  skillId         String
+  skill           Skill          @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([mentorProfileId, skillId])
+  @@map("mentor_expertise")
+}
+
+// Async Q&A guidance
+model Question {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation("QuestionAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  mentorId    String?
+  mentor      MentorProfile? @relation("QuestionMentor", fields: [mentorId], references: [id], onDelete: SetNull)
+  title       String
+  body        String
+  answer      String?
+  answeredAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([mentorId])
+  @@index([userId])
+  @@map("questions")
+}
+
+// Live/synchronous guidance sessions
+model MentorshipSession {
+  id          String        @id @default(uuid())
+  mentorId    String
+  mentor      MentorProfile @relation("SessionMentor", fields: [mentorId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation("SessionUser", fields: [userId], references: [id], onDelete: Cascade)
+  scheduledAt DateTime
+  durationMin Int           @default(30)
+  status      SessionStatus @default(REQUESTED)
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([mentorId])
+  @@index([userId])
+  @@map("mentorship_sessions")
+}
+
+// ----------------------------------------------------------------------------
+// ADMIN, FEEDBACK & MODERATION
+// ----------------------------------------------------------------------------
+
+model Feedback {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   String
+  message   String
+  rating    Int?     // 1-5 optional satisfaction score
+  createdAt DateTime @default(now())
+
+  @@map("feedback")
+}
+
+model Report {
+  id          String       @id @default(uuid())
+  filedById   String
+  filedBy     User         @relation("ReportFiler", fields: [filedById], references: [id], onDelete: Cascade)
+  targetType  String       // USER, MENTOR, RESOURCE, QUESTION
+  targetId    String
+  reason      String
+  status      ReportStatus @default(OPEN)
+  resolutionNote String?
+  createdAt   DateTime     @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status])
+  @@map("reports")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String   // e.g. "APPROVE_MENTOR", "DELETE_RESOURCE"
+  targetType String?
+  targetId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@map("audit_logs")
+}

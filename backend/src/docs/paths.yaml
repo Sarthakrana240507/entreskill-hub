@@ -1,0 +1,509 @@
+openapi: 3.0.0
+info:
+  title: EntreSkill Hub API Paths
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new account (USER or MENTOR)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, example: "Asha Verma" }
+                email: { type: string, example: "asha@example.com" }
+                password: { type: string, example: "StrongPass1" }
+                role: { type: string, enum: [USER, MENTOR], example: "USER" }
+      responses:
+        '201': { description: Account created }
+        '409': { description: Email already registered }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in and receive an access + refresh token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: Login successful }
+        '401': { description: Invalid credentials }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for a new access/refresh token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: New token pair issued }
+        '401': { description: Refresh token invalid or expired }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke a refresh token
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: Logged out }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the current authenticated user's profile
+      responses:
+        '200': { description: Current user }
+        '401': { description: Unauthorized }
+
+  /profile/skills:
+    get:
+      tags: [Profile]
+      summary: List the global skill catalogue
+      security: []
+      responses:
+        '200': { description: List of skills }
+
+  /profile/interests:
+    get:
+      tags: [Profile]
+      summary: List the global interest catalogue
+      security: []
+      responses:
+        '200': { description: List of interests }
+
+  /profile/me:
+    get:
+      tags: [Profile]
+      summary: Get the caller's skill/interest profile
+      responses:
+        '200': { description: Skill profile }
+    put:
+      tags: [Profile]
+      summary: Create or update the caller's skill/interest profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                experienceLevel: { type: string, enum: [BEGINNER, INTERMEDIATE, ADVANCED] }
+                availableHours: { type: integer, example: 10 }
+                budgetRange: { type: string, enum: [UNDER_5000, "5000_25000", "25000_100000", ABOVE_100000] }
+                skills:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      skillId: { type: string, format: uuid }
+                      proficiency: { type: integer, minimum: 1, maximum: 5 }
+                interestIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { description: Profile saved }
+
+  /ideas:
+    get:
+      tags: [Business Ideas]
+      summary: List business ideas (filterable, paginated). Pass recommended=true while authenticated for a personalized, ranked list.
+      security: []
+      parameters:
+        - in: query
+          name: recommended
+          schema: { type: boolean }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: difficulty
+          schema: { type: string, enum: [BEGINNER, INTERMEDIATE, ADVANCED] }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: List of business ideas }
+    post:
+      tags: [Business Ideas]
+      summary: Create a business idea (Admin only)
+      responses:
+        '201': { description: Idea created }
+        '403': { description: Forbidden — admin only }
+
+  /ideas/{id}:
+    get:
+      tags: [Business Ideas]
+      summary: Get a single business idea, with roadmap and approved resources
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Business idea detail }
+        '404': { description: Not found }
+    patch:
+      tags: [Business Ideas]
+      summary: Update a business idea (Admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Business Ideas]
+      summary: Delete a business idea (Admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+
+  /ideas/{id}/bookmark:
+    post:
+      tags: [Business Ideas]
+      summary: Toggle bookmark on a business idea for the caller
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Bookmark removed }
+        '201': { description: Bookmark added }
+
+  /ideas/bookmarks/mine:
+    get:
+      tags: [Business Ideas]
+      summary: List the caller's bookmarked ideas
+      responses:
+        '200': { description: Bookmarks }
+
+  /ideas/{ideaId}/roadmap:
+    post:
+      tags: [Roadmaps]
+      summary: Create the roadmap template for a business idea (Admin only)
+      parameters:
+        - in: path
+          name: ideaId
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, steps]
+              properties:
+                title: { type: string }
+                steps:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      order: { type: integer }
+                      phase: { type: string, enum: [VALIDATION, SKILLS_TOOLS, LEGAL, COST, MARKETING, LAUNCH] }
+                      title: { type: string }
+                      description: { type: string }
+                      estDays: { type: integer }
+      responses:
+        '201': { description: Roadmap created }
+
+  /roadmaps/{roadmapId}:
+    get:
+      tags: [Roadmaps]
+      summary: Get a roadmap template with its ordered steps
+      security: []
+      parameters:
+        - in: path
+          name: roadmapId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Roadmap detail }
+    patch:
+      tags: [Roadmaps]
+      summary: Update a roadmap template (Admin only)
+      parameters:
+        - in: path
+          name: roadmapId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /roadmaps/{roadmapId}/start:
+    post:
+      tags: [Roadmaps]
+      summary: Start following a roadmap (creates per-user progress rows)
+      parameters:
+        - in: path
+          name: roadmapId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: User roadmap progress initialized }
+
+  /roadmaps/progress/mine:
+    get:
+      tags: [Roadmaps]
+      summary: Progress Tracking Dashboard data — all roadmaps the caller has started
+      responses:
+        '200': { description: User roadmap progress list }
+
+  /roadmaps/progress/{userRoadmapId}/steps/{stepId}:
+    patch:
+      tags: [Roadmaps]
+      summary: Mark a roadmap step complete/incomplete; recalculates overall % automatically
+      parameters:
+        - in: path
+          name: userRoadmapId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: stepId
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isComplete]
+              properties:
+                isComplete: { type: boolean }
+      responses:
+        '200': { description: Progress updated }
+
+  /resources:
+    get:
+      tags: [Learning Resources]
+      summary: List learning resources (videos, articles, checklists)
+      security: []
+      parameters:
+        - in: query
+          name: type
+          schema: { type: string, enum: [VIDEO, ARTICLE, CHECKLIST] }
+        - in: query
+          name: businessIdeaId
+          schema: { type: string }
+      responses:
+        '200': { description: Resources }
+    post:
+      tags: [Learning Resources]
+      summary: Upload a learning resource (Mentor or Admin)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, type, url]
+              properties:
+                title: { type: string }
+                type: { type: string, enum: [VIDEO, ARTICLE, CHECKLIST] }
+                url: { type: string }
+                description: { type: string }
+                businessIdeaId: { type: string }
+      responses:
+        '201': { description: Resource created (PENDING unless uploaded by Admin) }
+
+  /resources/{id}/review:
+    patch:
+      tags: [Learning Resources]
+      summary: Approve or reject a pending resource (Admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Resource reviewed }
+
+  /resources/{id}/complete:
+    post:
+      tags: [Learning Resources]
+      summary: Mark a resource as completed for the caller's learning dashboard
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Progress recorded }
+
+  /mentors:
+    get:
+      tags: [Mentors]
+      summary: Public mentor directory (approved mentors only)
+      security: []
+      responses:
+        '200': { description: Mentor list }
+
+  /mentors/apply:
+    post:
+      tags: [Mentors]
+      summary: Submit a mentor application (goes to PENDING for admin review)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [headline, bio, yearsExperience, expertiseSkillIds]
+              properties:
+                headline: { type: string }
+                bio: { type: string }
+                yearsExperience: { type: integer }
+                expertiseSkillIds:
+                  type: array
+                  items: { type: string }
+      responses:
+        '201': { description: Application submitted }
+
+  /mentors/{id}/review:
+    patch:
+      tags: [Mentors]
+      summary: Approve or reject a mentor application (Admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Reviewed }
+
+  /mentors/me/mentees:
+    get:
+      tags: [Mentors]
+      summary: Mentor dashboard — mentee engagement (questions, sessions)
+      responses:
+        '200': { description: Engagement summary }
+
+  /questions:
+    post:
+      tags: [Q&A]
+      summary: Ask a question, optionally directed at a specific mentor
+      responses:
+        '201': { description: Question submitted }
+
+  /questions/{id}/answer:
+    patch:
+      tags: [Q&A]
+      summary: Mentor answers a question
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Answer recorded }
+
+  /sessions:
+    post:
+      tags: [Mentorship Sessions]
+      summary: Request a 1:1 mentorship session
+      responses:
+        '201': { description: Session requested }
+
+  /sessions/{id}:
+    patch:
+      tags: [Mentorship Sessions]
+      summary: Mentor confirms, completes, or cancels a session
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Session updated }
+
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      summary: Platform-wide KPI summary (Admin only)
+      responses:
+        '200': { description: Dashboard summary }
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List/search all users (Admin only)
+      responses:
+        '200': { description: User list }
+
+  /admin/users/{id}/status:
+    patch:
+      tags: [Admin]
+      summary: Activate or deactivate a user account (Admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Status updated }
+
+  /admin/reports:
+    get:
+      tags: [Admin]
+      summary: List moderation reports (Admin only)
+      responses:
+        '200': { description: Reports }
+
+  /feedback:
+    post:
+      tags: [Feedback]
+      summary: Submit platform feedback
+      responses:
+        '201': { description: Feedback recorded }
+
+  /reports:
+    post:
+      tags: [Feedback]
+      summary: Report a user, mentor, resource, or question for moderation
+      responses:
+        '201': { description: Report filed }
+
+  /notifications/mine:
+    get:
+      tags: [Notifications]
+      summary: List the caller's notifications
+      responses:
+        '200': { description: Notifications }

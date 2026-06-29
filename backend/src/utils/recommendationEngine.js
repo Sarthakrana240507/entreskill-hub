@@ -67,15 +67,33 @@ function scoreFeasibility(idea, profile) {
 /**
  * Computes ranked recommendations for a given user.
  * Returns ideas annotated with `matchScore` (0-100) and `matchBreakdown`.
+ *
+ * Accepts the same filters as the public idea listing (category, difficulty,
+ * search) so that "Show Matches For Me" composes correctly with the filter
+ * dropdowns instead of silently ignoring them.
  */
-async function getRecommendationsForUser(userId, { limit = 20 } = {}) {
+async function getRecommendationsForUser(userId, { limit = 20, category, difficulty, search } = {}) {
   const profile = await prisma.skillProfile.findUnique({
     where: { userId },
     include: { skills: true, interests: true },
   });
 
+  const where = {
+    isPublished: true,
+    ...(category ? { category: { equals: category, mode: 'insensitive' } } : {}),
+    ...(difficulty ? { difficulty } : {}),
+    ...(search
+      ? {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { summary: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
   const ideas = await prisma.businessIdea.findMany({
-    where: { isPublished: true },
+    where,
     include: { ideaSkills: true, ideaInterests: true },
   });
 

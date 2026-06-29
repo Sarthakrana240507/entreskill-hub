@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { api, apiErrorMessage } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -9,7 +9,7 @@ import { Select, Input } from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import type { BusinessIdea } from "@/lib/types";
 
-export default function IdeasPage() {
+function IdeasContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -118,5 +118,13 @@ export default function IdeasPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function IdeasPage() {
+  return (
+    <Suspense fallback={<div className="p-12 text-center text-ink-soft">Loading...</div>}>
+      <IdeasContent />
+    </Suspense>
   );
 }

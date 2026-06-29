@@ -20,7 +20,7 @@ const listIdeas = asyncHandler(async (req, res) => {
   const { page, limit, category, difficulty, search, recommended } = req.query;
 
   if (recommended && req.user) {
-    const ideas = await getRecommendationsForUser(req.user.id, { limit });
+    const ideas = await getRecommendationsForUser(req.user.id, { limit, category, difficulty, search });
     return res.status(200).json({
       success: true,
       data: { ideas, pagination: { page: 1, limit, total: ideas.length, personalized: true } },

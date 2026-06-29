@@ -51,6 +51,7 @@ export default function RoadmapProgressPage() {
   if (error) return <div className="px-6 py-24 text-center text-clay">{error}</div>;
   if (!userRoadmap) return <div className="px-6 py-24 text-center text-ink-soft">Roadmap progress not found. Start it from the idea page first.</div>;
 
+  const steps = userRoadmap.roadmap.steps || [];
   const completedStepIds = new Set(userRoadmap.stepProgress.filter((sp) => sp.isComplete).map((sp) => sp.roadmapStepId));
 
   return (
@@ -66,7 +67,7 @@ export default function RoadmapProgressPage() {
         <Card className="mt-6">
           <h2 className="mb-4 font-display text-lg font-semibold text-ink">Tap a step to mark it complete</h2>
           <RoadmapStepList
-            steps={userRoadmap.roadmap.steps}
+            steps={steps}
             completedStepIds={completedStepIds}
             onToggleStep={handleToggleStep}
           />

@@ -126,7 +126,7 @@ const listMyProgress = asyncHandler(async (req, res) => {
   const userRoadmaps = await prisma.userRoadmap.findMany({
     where: { userId: req.user.id },
     include: {
-      roadmap: { include: { businessIdea: true } },
+      roadmap: { include: { businessIdea: true, steps: { orderBy: { order: 'asc' } } } },
       stepProgress: { include: { roadmapStep: true }, orderBy: { roadmapStep: { order: 'asc' } } },
     },
     orderBy: { updatedAt: 'desc' },
